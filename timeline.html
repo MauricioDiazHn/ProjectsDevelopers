@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Timeline de Proyectos - ProjectsDevelopers</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.js"></script>
+    <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+    <script type="module" src="supabase.js"></script>
+    <style>
+        :root {
+            --glow-cyan: 0 0 20px rgba(6, 182, 212, 0.3);
+            --glow-purple: 0 0 20px rgba(168, 85, 247, 0.3);
+            --glow-pink: 0 0 20px rgba(236, 72, 153, 0.3);
+        }
+        
+        body {
+            background: radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+                        radial-gradient(circle at 80% 20%, rgba(255, 119, 198, 0.3) 0%, transparent 50%),
+                        radial-gradient(circle at 40% 40%, rgba(120, 219, 255, 0.2) 0%, transparent 50%),
+                        linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            min-height: 100vh;
+            font-family: 'Inter', system-ui, -apple-system, sans-serif;
+        }
+        
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+        
+        .glass-panel-sharp {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+        
+        .timeline-container {
+            position: relative;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .timeline-line {
+            position: absolute;
+            left: 50%;
+            top: 0;
+            bottom: 0;
+            width: 4px;
+            background: linear-gradient(to bottom, 
+                rgba(6, 182, 212, 0.8) 0%,
+                rgba(168, 85, 247, 0.8) 50%,
+                rgba(236, 72, 153, 0.8) 100%);
+            transform: translateX(-50%);
+            border-radius: 2px;
+            box-shadow: 0 0 20px rgba(6, 182, 212, 0.5);
+        }
+        
+        .timeline-item {
+            position: relative;
+            margin-bottom: 3rem;
+            opacity: 0;
+            transform: translateY(30px);
+            animation: slideIn 0.6s ease-out forwards;
+        }
+        
+        .timeline-item:nth-child(even) {
+            animation-delay: 0.2s;
+        }
+        
+        .timeline-item:nth-child(odd) {
+            animation-delay: 0.1s;
+        }
+        
+        .timeline-content {
+            width: 45%;
+            padding: 2rem;
+            position: relative;
+        }
+        
+        .timeline-item:nth-child(odd) .timeline-content {
+            margin-left: 55%;
+        }
+        
+        .timeline-item:nth-child(even) .timeline-content {
+            margin-right: 55%;
+            margin-left: 0;
+        }
+        
+        .timeline-dot {
+            position: absolute;
+            left: 50%;
+            top: 2rem;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            transform: translateX(-50%);
+            border: 4px solid;
+            z-index: 10;
+            box-shadow: 0 0 20px currentColor;
+        }
+        
+        .timeline-dot.status-en-progreso {
+            background: #06b6d4;
+            border-color: #06b6d4;
+            color: #06b6d4;
+        }
+        
+        .timeline-dot.status-completado {
+            background: #10b981;
+            border-color: #10b981;
+            color: #10b981;
+        }
+        
+        .timeline-dot.status-pausado {
+            background: #f59e0b;
+            border-color: #f59e0b;
+            color: #f59e0b;
+        }
+        
+        .timeline-dot.status-cancelado {
+            background: #ef4444;
+            border-color: #ef4444;
+            color: #ef4444;
+        }
+        
+        .timeline-arrow {
+            position: absolute;
+            top: 2rem;
+            width: 0;
+            height: 0;
+            border: 15px solid transparent;
+        }
+        
+        .timeline-item:nth-child(odd) .timeline-arrow {
+            left: -15px;
+            border-right-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .timeline-item:nth-child(even) .timeline-arrow {
+            right: -15px;
+            border-left-color: rgba(255, 255, 255, 0.1);
+        }
+        
+        .project-card {
+            transition: all 0.3s ease;
+        }
+        
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+        }
+        
+        .progress-bar {
+            height: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            border-radius: 4px;
+            background: linear-gradient(90deg, #06b6d4, #8b5cf6);
+            transition: width 0.8s ease;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .progress-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        .floating-particles {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: -1;
+        }
+        
+        .particle {
+            position: absolute;
+            width: 4px;
+            height: 4px;
+            background: rgba(6, 182, 212, 0.6);
+            border-radius: 50%;
+            animation: float 6s infinite ease-in-out;
+        }
+        
+        .particle:nth-child(2n) {
+            background: rgba(168, 85, 247, 0.6);
+            animation-delay: -2s;
+            animation-duration: 8s;
+        }
+        
+        .particle:nth-child(3n) {
+            background: rgba(236, 72, 153, 0.6);
+            animation-delay: -4s;
+            animation-duration: 7s;
+        }
+        
+        @keyframes slideIn {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        @keyframes shimmer {
+            to {
+                left: 100%;
+            }
+        }
+        
+        @keyframes float {
+            0%, 100% {
+                transform: translateY(0) rotate(0deg);
+                opacity: 0;
+            }
+            10% {
+                opacity: 1;
+            }
+            90% {
+                opacity: 1;
+            }
+            50% {
+                transform: translateY(-100vh) rotate(360deg);
+            }
+        }
+        
+        .priority-high {
+            border-left: 4px solid #ef4444;
+            background: linear-gradient(135deg, rgba(239, 68, 68, 0.1), rgba(255, 255, 255, 0.05));
+        }
+        
+        .priority-medium {
+            border-left: 4px solid #f59e0b;
+            background: linear-gradient(135deg, rgba(245, 158, 11, 0.1), rgba(255, 255, 255, 0.05));
+        }
+        
+        .priority-low {
+            border-left: 4px solid #10b981;
+            background: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(255, 255, 255, 0.05));
+        }
+        
+        .developer-avatar {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #06b6d4, #8b5cf6);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+        }
+        
+        .status-badge {
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+        
+        .status-en-progreso {
+            background: rgba(6, 182, 212, 0.2);
+            color: #06b6d4;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
+        
+        .status-completado {
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
+        }
+        
+        .status-pausado {
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+        
+        .status-cancelado {
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+        }
+        
+        /* Responsive Design */
+        @media (max-width: 768px) {
+            .timeline-line {
+                left: 30px;
+            }
+            
+            .timeline-content {
+                width: calc(100% - 80px);
+                margin-left: 80px !important;
+                margin-right: 0 !important;
+            }
+            
+            .timeline-dot {
+                left: 30px;
+            }
+            
+            .timeline-arrow {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <!-- Floating Particles Background -->
+    <div class="floating-particles" id="particles"></div>
+
+    <!-- Header -->
+    <header class="glass-panel-sharp mx-4 mt-4 p-4">
+        <div class="flex items-center justify-between">
+            <div class="flex items-center gap-4">
+                <button id="backBtn" class="glass-panel-sharp p-2 hover:border-cyan-400 transition-colors">
+                    <i data-lucide="arrow-left" class="w-5 h-5"></i>
+                </button>
+                <div>
+                    <h1 class="text-2xl font-bold bg-gradient-to-r from-cyan-400 to-purple-400 bg-clip-text text-transparent">
+                        Timeline de Proyectos
+                    </h1>
+                    <p class="text-gray-400 text-sm">Cronología visual de eventos y progreso</p>
+                </div>
+            </div>
+            
+            <div class="flex items-center gap-3">
+                <div class="glass-panel-sharp px-4 py-2">
+                    <span class="text-sm text-gray-300" id="eventCount">Cargando eventos...</span>
+                </div>
+                <button id="refreshTimelineBtn" class="glass-panel-sharp p-2 hover:border-cyan-400 transition-colors">
+                    <i data-lucide="refresh-cw" class="w-5 h-5"></i>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Timeline Container -->
+    <main class="container mx-auto px-4 py-8">
+        <div class="timeline-container">
+            <!-- Timeline Line -->
+            <div class="timeline-line"></div>
+            
+            <!-- Timeline Items Container -->
+            <div id="timelineContainer">
+                <!-- Loading State -->
+                <div id="loadingState" class="text-center py-20">
+                    <div class="glass-panel-sharp p-8 inline-block">
+                        <div class="flex items-center gap-3">
+                            <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-cyan-400"></div>
+                            <span class="text-gray-300">Cargando timeline...</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Error Message -->
+    <div id="errorMessage" class="fixed top-4 right-4 glass-panel-sharp p-4 text-red-400 border-red-400 hidden">
+        <div class="flex items-center gap-2">
+            <i data-lucide="alert-circle" class="w-5 h-5"></i>
+            <span id="errorText">Error cargando datos</span>
+        </div>
+    </div>
+
+    <!-- Success Message -->
+    <div id="successMessage" class="fixed top-4 right-4 glass-panel-sharp p-4 text-green-400 border-green-400 hidden">
+        <div class="flex items-center gap-2">
+            <i data-lucide="check-circle" class="w-5 h-5"></i>
+            <span id="successText">Timeline actualizado</span>
+        </div>
+    </div>
+
+    <script type="module">
+        import { getDevelopers, getProjects, getTimelineEvents } from './supabase.js';
+        
+        let timelineEvents = [];
+        let projects = [];
+        let developers = [];
+
+        // Inicializar partículas flotantes
+        function initParticles() {
+            const particlesContainer = document.getElementById('particles');
+            for (let i = 0; i < 20; i++) {
+                const particle = document.createElement('div');
+                particle.className = 'particle';
+                particle.style.left = Math.random() * 100 + '%';
+                particle.style.animationDelay = Math.random() * 6 + 's';
+                particlesContainer.appendChild(particle);
+            }
+        }
+
+        // Mostrar mensaje de error
+        function showError(message) {
+            const errorDiv = document.getElementById('errorMessage');
+            const errorText = document.getElementById('errorText');
+            errorText.textContent = message;
+            errorDiv.classList.remove('hidden');
+            setTimeout(() => errorDiv.classList.add('hidden'), 5000);
+        }
+
+        // Mostrar mensaje de éxito
+        function showSuccess(message) {
+            const successDiv = document.getElementById('successMessage');
+            const successText = document.getElementById('successText');
+            successText.textContent = message;
+            successDiv.classList.remove('hidden');
+            setTimeout(() => successDiv.classList.add('hidden'), 3000);
+        }
+
+        // Cargar datos desde Supabase
+        async function loadTimelineData() {
+            try {
+                console.log('Cargando datos del timeline...');
+                
+                // Cargar desarrolladores
+                developers = await getDevelopers();
+                console.log('Desarrolladores cargados:', developers.length);
+                
+                // Cargar proyectos
+                projects = await getProjects();
+                console.log('Proyectos cargados:', projects.length);
+                
+                // Cargar eventos del timeline
+                timelineEvents = await getTimelineEvents();
+                console.log('Eventos del timeline cargados:', timelineEvents.length);
+                
+                return true;
+            } catch (error) {
+                console.error('Error cargando datos del timeline:', error);
+                showError('Error cargando datos del timeline');
+                return false;
+            }
+        }
+
+        // Obtener información del desarrollador por ID
+        function getDeveloperInfo(developerId) {
+            const developer = developers.find(dev => dev.id === developerId);
+            return developer || { name: 'Desarrollador Desconocido', email: '' };
+        }
+
+        // Obtener información del proyecto por ID
+        function getProjectInfo(projectId) {
+            const project = projects.find(proj => proj.id === projectId);
+            return project || { name: 'Proyecto Desconocido', status: 'en-progreso' };
+        }
+
+        // Formatear fecha
+        function formatDate(dateString) {
+            const date = new Date(dateString);
+            const now = new Date();
+            const diffTime = Math.abs(now - date);
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            
+            if (diffDays === 1) {
+                return 'Ayer';
+            } else if (diffDays < 7) {
+                return `Hace ${diffDays} días`;
+            } else if (diffDays < 30) {
+                const weeks = Math.floor(diffDays / 7);
+                return `Hace ${weeks} semana${weeks > 1 ? 's' : ''}`;
+            } else {
+                return date.toLocaleDateString('es-ES', {
+                    year: 'numeric',
+                    month: 'long',
+                    day: 'numeric'
+                });
+            }
+        }
+
+        // Obtener icono para el tipo de evento
+        function getEventIcon(eventType) {
+            const icons = {
+                'created': 'plus-circle',
+                'updated': 'edit-3',
+                'completed': 'check-circle',
+                'paused': 'pause-circle',
+                'resumed': 'play-circle',
+                'cancelled': 'x-circle',
+                'milestone': 'flag',
+                'comment': 'message-circle',
+                'file_uploaded': 'upload',
+                'deadline_changed': 'calendar'
+            };
+            return icons[eventType] || 'circle';
+        }
+
+        // Renderizar timeline
+        function renderTimeline() {
+            const container = document.getElementById('timelineContainer');
+            const loadingState = document.getElementById('loadingState');
+            
+            if (timelineEvents.length === 0) {
+                container.innerHTML = `
+                    <div class="text-center py-20">
+                        <div class="glass-panel-sharp p-8 inline-block">
+                            <i data-lucide="calendar-x" class="w-12 h-12 mx-auto mb-4 text-gray-400"></i>
+                            <h3 class="text-xl font-semibold mb-2">No hay eventos en el timeline</h3>
+                            <p class="text-gray-400">Los eventos aparecerán aquí a medida que se realicen cambios en los proyectos.</p>
+                        </div>
+                    </div>
+                `;
+                return;
+            }
+
+            // Ordenar eventos por fecha (más recientes primero)
+            const sortedEvents = [...timelineEvents].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            
+            let html = '';
+            sortedEvents.forEach((event, index) => {
+                const project = getProjectInfo(event.project_id);
+                const developer = getDeveloperInfo(event.user_id || event.developer_id);
+                const eventIcon = getEventIcon(event.event_type);
+                const statusClass = `status-${project.status.replace(' ', '-')}`;
+                const priorityClass = project.priority ? `priority-${project.priority}` : 'priority-medium';
+                
+                const developerInitials = developer.name
+                    .split(' ')
+                    .map(n => n[0])
+                    .join('')
+                    .toUpperCase();
+
+                html += `
+                    <div class="timeline-item" style="animation-delay: ${index * 0.1}s">
+                        <div class="timeline-dot ${statusClass}"></div>
+                        <div class="timeline-content">
+                            <div class="glass-panel project-card ${priorityClass}">
+                                <div class="timeline-arrow"></div>
+                                
+                                <!-- Header del evento -->
+                                <div class="mb-4">
+                                    <div class="flex items-start justify-between mb-3">
+                                        <h3 class="font-semibold text-lg pr-4">${project.name}</h3>
+                                        <span class="status-badge ${statusClass} flex-shrink-0">${project.status}</span>
+                                    </div>
+                                    <div class="flex items-center gap-3">
+                                        <div class="developer-avatar">
+                                            ${developerInitials}
+                                        </div>
+                                        <div>
+                                            <p class="text-sm text-gray-300 font-medium">${developer.name}</p>
+                                            <p class="text-xs text-gray-500">Evento: ${event.event_type}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Descripción del evento -->
+                                <div class="mb-4 p-3 rounded-lg bg-black bg-opacity-20 border border-white/10">
+                                    <div class="flex items-center gap-2 text-cyan-400 mb-2">
+                                        <i data-lucide="${eventIcon}" class="w-4 h-4"></i>
+                                        <p class="text-sm font-semibold">${event.description || 'Evento del proyecto'}</p>
+                                    </div>
+                                    ${project.description ? `
+                                    <p class="text-sm text-gray-400 pl-6">${project.description}</p>
+                                    ` : ''}
+                                </div>
+                                
+                                <!-- Barra de progreso -->
+                                ${project.progress !== undefined ? `
+                                <div class="mb-4">
+                                    <div class="flex justify-between items-center mb-2">
+                                        <span class="text-sm text-gray-400">Progreso</span>
+                                        <span class="text-sm font-semibold text-cyan-400">${project.progress}%</span>
+                                    </div>
+                                    <div class="progress-bar">
+                                        <div class="progress-fill" style="width: ${project.progress}%"></div>
+                                    </div>
+                                </div>
+                                ` : ''}
+                                
+                                <!-- Footer con fecha y metadata -->
+                                <div class="flex items-center justify-between pt-4 border-t border-white border-opacity-10">
+                                    <div class="flex items-center gap-2 text-sm text-gray-400">
+                                        <i data-lucide="clock" class="w-4 h-4"></i>
+                                        <span>${formatDate(event.created_at)}</span>
+                                    </div>
+                                    ${project.end_date ? `
+                                    <div class="flex items-center gap-2 text-sm text-gray-400">
+                                        <i data-lucide="calendar" class="w-4 h-4"></i>
+                                        <span>Fecha límite: ${formatDate(project.end_date)}</span>
+                                    </div>
+                                    ` : ''}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+            
+            // Actualizar contador de eventos
+            document.getElementById('eventCount').textContent = `${timelineEvents.length} eventos`;
+            
+            // Inicializar iconos
+            setTimeout(() => {
+                lucide.createIcons();
+            }, 100);
+        }
+
+        // Event listeners
+        function setupEventListeners() {
+            // Botón de regresar
+            document.getElementById('backBtn').addEventListener('click', () => {
+                window.history.back();
+            });
+
+            // Botón de actualizar
+            document.getElementById('refreshTimelineBtn').addEventListener('click', async () => {
+                await initTimeline();
+                showSuccess('Timeline actualizado');
+            });
+        }
+
+        // Inicializar timeline
+        async function initTimeline() {
+            const success = await loadTimelineData();
+            if (success) {
+                renderTimeline();
+            }
+        }
+
+        // Inicializar aplicación
+        document.addEventListener('DOMContentLoaded', async () => {
+            console.log('Inicializando timeline...');
+            
+            // Inicializar partículas
+            initParticles();
+            
+            // Configurar event listeners
+            setupEventListeners();
+            
+            // Cargar y renderizar timeline
+            await initTimeline();
+            
+            // Inicializar iconos
+            lucide.createIcons();
+            
+            console.log('Timeline inicializado correctamente');
+        });
+    </script>
+</body>
+</html>
