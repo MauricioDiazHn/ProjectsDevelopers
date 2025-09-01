@@ -357,6 +357,59 @@ async function searchProjects(query) {
   return data || [];
 }
 
+// ==== MANEJO DE TAREAS ====
+
+// Obtener todas las tareas
+async function getTasks() {
+    const client = await ensureSupabaseReady();
+    const { data, error } = await client
+        .from('tasks')
+        .select('*')
+        .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return data || [];
+}
+
+// Crear una nueva tarea
+async function createTask(taskData) {
+    const client = await ensureSupabaseReady();
+    const { data, error } = await client
+        .from('tasks')
+        .insert(taskData)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+
+// Actualizar una tarea
+async function updateTask(id, updates) {
+    const client = await ensureSupabaseReady();
+    const { data, error } = await client
+        .from('tasks')
+        .update(updates)
+        .eq('id', id)
+        .select()
+        .single();
+
+    if (error) throw error;
+    return data;
+}
+
+// Eliminar una tarea
+async function deleteTask(id) {
+    const client = await ensureSupabaseReady();
+    const { error } = await client
+        .from('tasks')
+        .delete()
+        .eq('id', id);
+
+    if (error) throw error;
+    return true;
+}
+
 // ==== MANEJO DE TIMELINE ====
 
 // Crear evento en el timeline
@@ -583,6 +636,12 @@ export {
   getProjectsByStatus,
   getProjectsByPriority,
   searchProjects,
+
+  // Tareas
+  getTasks,
+  createTask,
+  updateTask,
+  deleteTask,
   
   // Timeline
   createTimelineEvent,
